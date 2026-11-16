@@ -1,7 +1,7 @@
 /* Forge 170 service worker: app works offline at the gym.
    The page is network-first (updates arrive as soon as you're online),
    everything else is cache-first. Bump VERSION on each release. */
-const VERSION = 'forge-v2';
+const VERSION = 'forge-v3';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
@@ -17,7 +17,7 @@ self.addEventListener('fetch', e => {
   const isPage = req.mode === 'navigate' || (url.origin === location.origin && url.pathname.endsWith('/index.html'));
   if (isPage) {
     e.respondWith(
-      fetch(req).then(res => { const copy = res.clone(); caches.open(VERSION).then(c => c.put('index.html', copy)); return res; })
+      fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }).then(res => { const copy = res.clone(); caches.open(VERSION).then(c => c.put('index.html', copy)); return res; })
         .catch(() => caches.match('index.html').then(r => r || caches.match('./')))
     );
     return;
