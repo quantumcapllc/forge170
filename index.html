@@ -616,7 +616,7 @@ const FOODS=[
  ['rice','Rice (cup)',['rice'],205,4],['chicken','Chicken breast (6 oz)',['chicken breast','chicken'],280,52,170],['thigh','Chicken thigh (6 oz)',['chicken thigh','thigh'],350,42,170],
  ['steak','Steak (6 oz)',['steak','beef'],400,46,170],['flank','Flank steak (¼ lb raw)',['flank steak','flank'],176,24,113],['salmon','Salmon (6 oz)',['salmon'],350,38,170],['gbeef','Ground beef (6 oz)',['ground beef','burger patty'],340,40],['tuna','Tuna (can)',['tuna'],120,26],['shrimp','Shrimp (6 oz)',['shrimp','prawns'],170,36],
  ['tofu','Tofu (100 g)',['tofu'],80,9],['edamame','Edamame (cup)',['edamame'],190,17],['beans','Beans (cup)',['beans','chickpeas'],225,15],['lentils','Lentils (cup)',['lentils','lentil soup'],230,18],
- ['potato','Potato',['potato'],160,4],['sweetpot','Sweet potato',['sweet potato'],115,2],['broccoli','Broccoli (cup)',['broccoli'],30,2.5],['salad','Side salad',['salad'],100,3],['avocado','Avocado (half)',['avocado','guac'],120,1.5],
+ ['potato','Potato',['potato'],160,4],['sweetpot','Sweet potato',['sweet potato'],115,2],['broccoli','Broccoli (cup)',['broccoli'],30,2.5],['salad','Side salad',['salad'],100,3],['avocado','Avocado (half)',['avocado','guac'],120,1.5],['tjbb','Beef & broccoli (TJ bag)',['beef and broccoli','beef & broccoli','beef broccoli'],1500,48],
  ['cheese','Cheese (slice)',['cheese'],110,7],['hummus','Hummus (2 tbsp)',['hummus'],70,2],['bagel','Bagel (small)',['bagel'],190,7],['bagelcc','Bagel + cream cheese',['bagel and cream cheese','bagel with cream cheese','bagel cream cheese','bagel & cream cheese'],290,9],['creamcheese','Cream cheese (2 tbsp)',['cream cheese'],100,2],['kotlet','Kotlet (small)',['kotlet','cutlet','persian cutlet'],150,9],['yogbowl','Yogurt bowl',['yogurt bowl'],260,21],['croissant','Croissant',['croissant'],230,5],['pancakes','Pancakes (3)',['pancakes','pancake'],350,9],
  ['bacon','Bacon (slice)',['bacon'],45,3],['sausage','Sausage',['sausage'],180,8],['quinoa','Quinoa (cup)',['quinoa'],220,8],['pasta','Pasta (plate)',['pasta','spaghetti'],600,20],
  ['sandwich','Sandwich',['sandwich','sub'],450,25],['burrito','Burrito',['burrito'],900,40],['burger','Burger',['burger','cheeseburger'],650,30],['pizza','Pizza (slice)',['pizza'],285,12],['fries','Fries (medium)',['fries'],365,4],
@@ -630,16 +630,18 @@ const QUICK={
  dates:{t:'Dates',v:[['dates','Medjool']],o:[1,2,3,4,5,6],def:2,lab:q=>q,note:'Medjool dates: 66 kcal each. Small Deglet Noor dates are about 20 kcal each.'},
  nuts:{t:'Nuts',v:[['pistachio','Pistachios'],['cashew','Cashews'],['mixnuts','Mixed']],o:[.5,1,1.5,2,3],def:1,unit:'handful',lab:q=>q===.5?'½':q===1.5?'1½':String(q),note:'1 handful = 1 oz (28 g) = ¼ cup ≈ 49 pistachio kernels or 18 cashews. Use a ¼-cup scoop for a while to calibrate your hand.'},
  flank:{t:'Flank steak (Trader Joe’s)',v:[['flank','Flank steak']],o:[.25,.5,.75,.8,.9,1],def:.5,unit:'lb',scale:q=>q/.25,lab:q=>q===.25?'¼ lb':q===.5?'½ lb':q===.75?'¾ lb':q+' lb',note:'Raw weight. A whole pack is 0.8–1 lb (about 700 kcal and 97 g protein per lb).'},
+ bb:{t:'Beef & broccoli (Trader Joe’s)',v:[['tjbb','Beef & broccoli']],o:[.25,.5,.75,1],def:.5,unit:'bag',lab:q=>({.25:'¼',.5:'½',.75:'¾',1:'Whole'})[q]||String(q),note:'Label: 230 kcal and 8 g protein per cup, about 6 cups per bag. Includes the 1 tbsp of oil the bag says to cook with.'},
+ avo:{t:'Avocado',v:[['avocado','Avocado']],o:[.25,.5,1],def:.5,unit:'avocado',scale:q=>q*2,lab:q=>q===.25?'¼':q===.5?'½':'Whole',note:'A medium avocado is about 240 kcal and 3 g protein, mostly healthy fat.'},
  yogurt:{t:'Yogurt bowl',v:[['yogbowl','Greek yogurt + berries']],o:[0,1,2],def:1,lab:q=>q?q+' tbsp PB':'No PB',custom:q=>({n:`Yogurt bowl${q?` + ${q} tbsp PB`:''}`,kcal:165+95*q,p:17.5+3.5*q,q:1}),note:'1 cup plain Greek yogurt and ½ cup berries, plus peanut butter.'}
 };
-const QCHIPS=[['eggs','Boiled eggs','s'],['cappuccino','Cappuccino','f'],['bagelcc','Bagel + cream cheese','f'],['bowl','Teriyaki bowl','b'],['flank','Flank steak','s'],['kotlet','Kotlet','s'],['nuts','Nuts','s'],['dates','Dates','s'],['yogurt','Yogurt bowl','s']];
+const QCHIPS=[['eggs','Boiled eggs','s'],['cappuccino','Cappuccino','f'],['bagelcc','Bagel + cream cheese','f'],['bowl','Teriyaki bowl','b'],['flank','Flank steak','s'],['kotlet','Kotlet','s'],['nuts','Nuts','s'],['dates','Dates','s'],['bb','Beef & broccoli','s'],['avo','Avocado','s'],['yogurt','Yogurt bowl','s']];
 function quickChips(){const now=new Date(),hr=now.getHours()+now.getMinutes()/60,cut=Date.now()-30*DAY,sc={};
   Object.values(S.weights).forEach(o=>((o&&o.food)||[]).forEach(f=>{if(!f.k||!(f.at>cut))return;const t=new Date(f.at);let dh=Math.abs(t.getHours()+t.getMinutes()/60-hr);dh=Math.min(dh,24-dh);if(dh<=2.5)sc[f.k]=(sc[f.k]||0)+1}));
   return QCHIPS.map((c,i)=>({c,i,s:sc[c[0]]||0})).sort((a,b)=>b.s-a.s||a.i-b.i).map(({c,s})=>{const st=s>=2?' style="border-color:color-mix(in srgb,var(--yellow) 60%,var(--line))"':'';
     return c[2]==='s'?`<button class="chip" data-act="qsheet" data-k="${c[0]}"${st}>${c[1]}</button>`:c[2]==='b'?`<button class="chip" data-act="bowl"${st}>${c[1]}</button>`:`<button class="chip" data-act="qfood" data-id="${c[0]}"${st}>${c[1]}</button>`}).join('')}
 let qsel={};
 function qEntry(k,v,q){const Q=QUICK[k];if(Q.custom)return Object.assign(Q.custom(q),{k});const f=FOODS.find(x=>x.id===v);const m=Q.scale?Q.scale(q):q;
-  if(Q.unit)return {n:`${f.n.replace(/\s*\(.*\)$/,'')} (${Q.lab(q)}${Q.unit==='handful'?(q===1?' handful':' handfuls'):''})`,kcal:f.kcal*m,p:f.p*m,q:1,k};
+  if(Q.unit)return {n:`${f.n.replace(/\s*\(.*\)$/,'')} (${Q.lab(q)}${Q.unit==='handful'?(q===1?' handful':' handfuls'):Q.unit==='bag'?' bag':''})`,kcal:f.kcal*m,p:f.p*m,q:1,k};
   return {n:f.n,kcal:f.kcal*m,p:f.p*m,q,k}}
 function qSheet(k){const Q=QUICK[k];const last=(S.settings.lastQty||{})[k]||{};const v=qsel.v||last.v||Q.v[0][0];const lq=last.q!=null?last.q:Q.def;
   return `<div class="row between"><h3>${esc(Q.t)}</h3><button class="chip" data-act="close">Close</button></div>
@@ -987,7 +989,7 @@ function settingsSheet(){
   <div class="row"><label class="btn ghost sm grow" for="imp-f" style="cursor:pointer">Restore from file</label><button class="btn ghost sm grow" data-act="import-show">Paste backup</button></div>
   <input type="file" id="imp-f" accept="application/json,.json,text/plain" hidden>
   <div id="imp" hidden><div class="field"><label for="imp-t">Paste backup text</label><textarea id="imp-t"></textarea></div><button class="btn ghost block" data-act="import">Import and merge</button></div>
-  <p class="mono muted" style="font-size:11px;margin:0">FORGE 170 · VERSION 4</p>
+  <p class="mono muted" style="font-size:11px;margin:0">FORGE 170 · VERSION 5</p>
   <p class="muted" style="font-size:12px;margin:0">Your data is stored only on this phone. ${st.lastBackup?`Last backup: ${shortDate(st.lastBackup)}.`:'No backup yet.'} Save a backup file to iCloud Drive once a week so you never lose your history. Imports merge with what's here and never delete anything.</p>`;
 }
 function summarySheet(s,prs){
