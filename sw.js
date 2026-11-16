@@ -1,7 +1,7 @@
 /* Forge 170 service worker: app works offline at the gym.
    The page is network-first (updates arrive as soon as you're online),
    everything else is cache-first. Bump VERSION on each release. */
-const VERSION = 'forge-v3';
+const VERSION = 'forge-v4';
 const SHELL = ['./', 'index.html', 'manifest.webmanifest', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 
 self.addEventListener('install', e => {

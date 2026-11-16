@@ -152,6 +152,18 @@ h3{font-family:var(--display);font-weight:700;font-size:19px;letter-spacing:.03e
 .cdots i{aspect-ratio:1;border-radius:50%;border:1.5px solid var(--line);max-width:16px;justify-self:center;width:100%}
 .cdots i.on{background:var(--orange);border-color:var(--orange)}
 .cdots i.t{outline:1.5px solid var(--chalk);outline-offset:1.5px}
+.fuel{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.fring{display:grid;grid-template-columns:58px 1fr;gap:10px;align-items:center;min-width:0}
+.qchips{display:flex;flex-wrap:wrap;gap:6px}
+.food{display:grid;grid-template-columns:1fr auto auto 30px;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line);font-size:14px}
+.food>span:first-child{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.food .fk{font-family:var(--mono);font-size:11.5px;color:var(--muted);text-align:right;white-space:nowrap}
+.food .fx{width:30px;height:30px;border-radius:9px;color:var(--faint);font-size:19px}
+.food .fx:active{background:var(--surface3);color:var(--red)}
+.parse .food{grid-template-columns:1fr auto auto}
+.food.unk span:first-child{color:var(--yellow)}
+.optgrid{display:flex;flex-wrap:wrap;gap:6px}
+.optgrid .chip{height:36px;font-size:13px}
 .cta{position:relative;overflow:hidden;height:64px;font-size:17px;border-radius:18px}
 .cta::before{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%);transform:translateX(-100%);animation:sheen 3.5s 1s infinite}
 @keyframes sheen{0%,60%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
@@ -360,11 +372,12 @@ const TEMPLATES=[
  {name:'Core',ex:['Hanging Leg Raise','Cable Crunch','Ab Wheel Rollout','Pallof Press','Plank']}
 ];
 const PLATES=[[45,'var(--blue)'],[35,'var(--yellow)'],[25,'var(--green)'],[10,'var(--chalk)'],[5,'var(--red)'],[2.5,'var(--muted)']];
-const DEF_SETTINGS={goal:170,startWeight:null,startDate:null,height:null,protein:170,rest:90,bar:45,custom:[],paused:[],shakeProtein:35,shakeItems:'Whey, milk, banana, berries',creatineDose:5,creatineInShake:true};
+const DEF_SETTINGS={goal:170,startWeight:null,startDate:null,height:null,protein:170,rest:90,bar:45,custom:[],paused:[],shakeProtein:35,shakeItems:'Whey, milk, banana, berries',creatineDose:5,creatineInShake:true,shakeKcal:415,kcalTarget:null,lastEggs:4,lastBowl:null,myFoods:[],lastQty:{},amPB:1};
 
 /* ---------- state ---------- */
 let S={settings:Object.assign({},DEF_SETTINGS),weights:{},sessions:{},active:null,activeU:0};
 let tab='today', preview=false, SAMPLE=null, logSeg='workouts', range='all', liftSel=null, expanded=null, pickerGroup='All', pickerQ='', pickerFor='add';
+let foodQ='',bowlSel=null;
 let db=null, mode='init', restT=null;
 const LS='forge170.v1';
 try{const j=JSON.parse(localStorage.getItem(LS)||'null'); if(j){S=Object.assign(S,j);S.settings=Object.assign({},DEF_SETTINGS,j.settings||{});}}catch(e){}
@@ -591,7 +604,93 @@ function lastDone(n){const L=sessList(S);for(let i=L.length-1;i>=0;i--){if(L[i].
 function resolveTpl(t){return t.ex.map(x=>{let n=x,alts=null;if(Array.isArray(x)){alts=x;n=x[0];x.forEach(c=>{if(lastDone(c)<lastDone(n))n=c})}const inf=exInfo(n,S);const w=t.def&&t.def[n]!=null?t.def[n]:(inf.bw||inf.t)?0:null;return {n,alts,w,r:t.def||alts?(inf.t?30:10):null}})}
 function platesFor(w,bar){let side=(w-bar)/2;if(!(side>0))return [];const out=[];PLATES.forEach(([p,c])=>{while(side>=p-1e-9){out.push([p,c]);side-=p}});return out}
 function weekStats(d,monday){const end=monday.getTime()+7*DAY;const bw=latestBW(d);const g={};GROUPS.forEach(x=>g[x]=0);let sets=0,volume=0,count=0;sessList(d).forEach(s=>{const t=pkey(s.date).getTime();if(t<monday.getTime()||t>=end)return;count++;s.ex.forEach(e=>{const inf=exInfo(e.n,d);e.sets.forEach(st=>{sets++;volume+=vol(st,inf,bw);if(g[inf.g]!=null)g[inf.g]++})})});return {g,sets,volume,count}}
-function lastDays(d,n){const out=[];for(let i=n-1;i>=0;i--){const dd=new Date();dd.setHours(12,0,0,0);dd.setDate(dd.getDate()-i);const k=dkey(dd);const o=(d.weights||{})[k]||{};out.push({k,dd,p:+o.protein||0,c:!!o.creatine,s:+o.shake||0})}return out}
+/* ---------- food ---------- */
+const BOWL_P=[['Chicken Thigh',430,34],['Chicken Breast',330,50],['Grass Fed Steak',420,42],['Filet Mignon',400,42],['Ōra King Salmon',480,39],['Hidden Fjord Salmon',470,39],['Combo',380,41],['Chicken & Broccoli',360,45],['Filet Mignon & Broccoli',420,42],['Charred Pork Ribs',550,32],['Organic Tofu',300,20]];
+const BOWL_B=[['Rice',330,6],['Salad',40,2],['Half & half',185,4]];
+const FOODS=[
+ ['egg','Boiled egg',['boiled egg','egg'],72,6.3],['cappuccino','Cappuccino',['cappuccino','capp','cappucino'],120,7],['latte','Latte',['latte'],190,12],['coffee','Black coffee',['americano','espresso','black coffee','coffee'],5,0],
+ ['whey','Whey scoop',['whey','scoop','protein powder'],120,24],['milk','Milk (cup)',['milk'],150,8],['banana','Banana',['banana'],105,1.3],['berries','Berries (cup)',['berries','berry','blueberries','strawberries','raspberries'],70,1],
+ ['apple','Apple',['apple'],95,.5],['orange','Orange',['orange'],62,1.2],['dates','Medjool date',['medjool','date'],66,.4],['grapes','Grapes (cup)',['grapes'],104,1],
+ ['greekyog','Greek yogurt (cup)',['greek yogurt','yogurt','yoghurt'],130,17,170],['cottage','Cottage cheese (cup)',['cottage cheese','cottage'],180,24],['oats','Oatmeal (cup)',['oatmeal','oats','porridge'],160,6],
+ ['toast','Toast (slice)',['toast','bread'],80,3],['pb','Peanut butter (tbsp)',['peanut butter','pb'],95,3.5],['almonds','Almonds (handful, 1 oz)',['almonds','walnuts'],165,6,28],['pistachio','Pistachios (handful, 1 oz)',['pistachios','pistachio'],159,5.7,28],['cashew','Cashews (handful, 1 oz)',['cashews','cashew'],157,5.2,28],['mixnuts','Mixed nuts (handful, 1 oz)',['mixed nuts','nuts'],165,5,28],
+ ['rice','Rice (cup)',['rice'],205,4],['chicken','Chicken breast (6 oz)',['chicken breast','chicken'],280,52,170],['thigh','Chicken thigh (6 oz)',['chicken thigh','thigh'],350,42,170],
+ ['steak','Steak (6 oz)',['steak','beef'],400,46,170],['flank','Flank steak (¼ lb raw)',['flank steak','flank'],176,24,113],['salmon','Salmon (6 oz)',['salmon'],350,38,170],['gbeef','Ground beef (6 oz)',['ground beef','burger patty'],340,40],['tuna','Tuna (can)',['tuna'],120,26],['shrimp','Shrimp (6 oz)',['shrimp','prawns'],170,36],
+ ['tofu','Tofu (100 g)',['tofu'],80,9],['edamame','Edamame (cup)',['edamame'],190,17],['beans','Beans (cup)',['beans','chickpeas'],225,15],['lentils','Lentils (cup)',['lentils','lentil soup'],230,18],
+ ['potato','Potato',['potato'],160,4],['sweetpot','Sweet potato',['sweet potato'],115,2],['broccoli','Broccoli (cup)',['broccoli'],30,2.5],['salad','Side salad',['salad'],100,3],['avocado','Avocado (half)',['avocado','guac'],120,1.5],
+ ['cheese','Cheese (slice)',['cheese'],110,7],['hummus','Hummus (2 tbsp)',['hummus'],70,2],['bagel','Bagel (small)',['bagel'],190,7],['bagelcc','Bagel + cream cheese',['bagel and cream cheese','bagel with cream cheese','bagel cream cheese','bagel & cream cheese'],290,9],['creamcheese','Cream cheese (2 tbsp)',['cream cheese'],100,2],['kotlet','Kotlet (small)',['kotlet','cutlet','persian cutlet'],150,9],['yogbowl','Yogurt bowl',['yogurt bowl'],260,21],['croissant','Croissant',['croissant'],230,5],['pancakes','Pancakes (3)',['pancakes','pancake'],350,9],
+ ['bacon','Bacon (slice)',['bacon'],45,3],['sausage','Sausage',['sausage'],180,8],['quinoa','Quinoa (cup)',['quinoa'],220,8],['pasta','Pasta (plate)',['pasta','spaghetti'],600,20],
+ ['sandwich','Sandwich',['sandwich','sub'],450,25],['burrito','Burrito',['burrito'],900,40],['burger','Burger',['burger','cheeseburger'],650,30],['pizza','Pizza (slice)',['pizza'],285,12],['fries','Fries (medium)',['fries'],365,4],
+ ['sushi','Sushi roll',['sushi','roll'],300,10],['ramen','Ramen (bowl)',['ramen','pho','noodles'],550,20],['protbar','Protein bar',['protein bar'],220,20],['granola','Granola bar',['granola'],190,4],
+ ['chips','Chips (small bag)',['chips','crisps'],160,2],['cookie','Cookie',['cookie'],150,2],['chocolate','Chocolate (bar)',['chocolate'],230,3],['icecream','Ice cream (cup)',['ice cream'],270,5],
+ ['beer','Beer',['beer'],150,1.5],['wine','Wine (glass)',['wine'],125,0],['soda','Soda (can)',['soda','coke','pepsi'],140,0],['oj','Orange juice (cup)',['orange juice','juice'],110,2]
+].map(([id,n,a,kcal,p,g])=>({id,n,a,kcal,p,g}));
+const QUICK={
+ eggs:{t:'Boiled eggs',v:[['egg','Boiled eggs']],o:[2,3,4,5,6],def:4,lab:q=>q,note:'72 kcal and 6.3 g protein per egg.'},
+ kotlet:{t:'Persian cutlets (kotlet)',v:[['kotlet','Kotlet']],o:[2,3,4,5,6,8],def:4,lab:q=>q,note:'Small homemade kotlet (ground beef, potato, onion, pan-fried): about 150 kcal and 9 g protein each. Estimate.'},
+ dates:{t:'Dates',v:[['dates','Medjool']],o:[1,2,3,4,5,6],def:2,lab:q=>q,note:'Medjool dates: 66 kcal each. Small Deglet Noor dates are about 20 kcal each.'},
+ nuts:{t:'Nuts',v:[['pistachio','Pistachios'],['cashew','Cashews'],['mixnuts','Mixed']],o:[.5,1,1.5,2,3],def:1,unit:'handful',lab:q=>q===.5?'½':q===1.5?'1½':String(q),note:'1 handful = 1 oz (28 g) = ¼ cup ≈ 49 pistachio kernels or 18 cashews. Use a ¼-cup scoop for a while to calibrate your hand.'},
+ flank:{t:'Flank steak (Trader Joe’s)',v:[['flank','Flank steak']],o:[.25,.5,.75,.8,.9,1],def:.5,unit:'lb',scale:q=>q/.25,lab:q=>q===.25?'¼ lb':q===.5?'½ lb':q===.75?'¾ lb':q+' lb',note:'Raw weight. A whole pack is 0.8–1 lb (about 700 kcal and 97 g protein per lb).'},
+ yogurt:{t:'Yogurt bowl',v:[['yogbowl','Greek yogurt + berries']],o:[0,1,2],def:1,lab:q=>q?q+' tbsp PB':'No PB',custom:q=>({n:`Yogurt bowl${q?` + ${q} tbsp PB`:''}`,kcal:165+95*q,p:17.5+3.5*q,q:1}),note:'1 cup plain Greek yogurt and ½ cup berries, plus peanut butter.'}
+};
+const QCHIPS=[['eggs','Boiled eggs','s'],['cappuccino','Cappuccino','f'],['bagelcc','Bagel + cream cheese','f'],['bowl','Teriyaki bowl','b'],['flank','Flank steak','s'],['kotlet','Kotlet','s'],['nuts','Nuts','s'],['dates','Dates','s'],['yogurt','Yogurt bowl','s']];
+function quickChips(){const now=new Date(),hr=now.getHours()+now.getMinutes()/60,cut=Date.now()-30*DAY,sc={};
+  Object.values(S.weights).forEach(o=>((o&&o.food)||[]).forEach(f=>{if(!f.k||!(f.at>cut))return;const t=new Date(f.at);let dh=Math.abs(t.getHours()+t.getMinutes()/60-hr);dh=Math.min(dh,24-dh);if(dh<=2.5)sc[f.k]=(sc[f.k]||0)+1}));
+  return QCHIPS.map((c,i)=>({c,i,s:sc[c[0]]||0})).sort((a,b)=>b.s-a.s||a.i-b.i).map(({c,s})=>{const st=s>=2?' style="border-color:color-mix(in srgb,var(--yellow) 60%,var(--line))"':'';
+    return c[2]==='s'?`<button class="chip" data-act="qsheet" data-k="${c[0]}"${st}>${c[1]}</button>`:c[2]==='b'?`<button class="chip" data-act="bowl"${st}>${c[1]}</button>`:`<button class="chip" data-act="qfood" data-id="${c[0]}"${st}>${c[1]}</button>`}).join('')}
+let qsel={};
+function qEntry(k,v,q){const Q=QUICK[k];if(Q.custom)return Object.assign(Q.custom(q),{k});const f=FOODS.find(x=>x.id===v);const m=Q.scale?Q.scale(q):q;
+  if(Q.unit)return {n:`${f.n.replace(/\s*\(.*\)$/,'')} (${Q.lab(q)}${Q.unit==='handful'?(q===1?' handful':' handfuls'):''})`,kcal:f.kcal*m,p:f.p*m,q:1,k};
+  return {n:f.n,kcal:f.kcal*m,p:f.p*m,q,k}}
+function qSheet(k){const Q=QUICK[k];const last=(S.settings.lastQty||{})[k]||{};const v=qsel.v||last.v||Q.v[0][0];const lq=last.q!=null?last.q:Q.def;
+  return `<div class="row between"><h3>${esc(Q.t)}</h3><button class="chip" data-act="close">Close</button></div>
+  ${Q.v.length>1?`<div class="optgrid">${Q.v.map(([id,l])=>`<button class="chip ${id===v?'on':''}" data-act="qsheet-v" data-k="${k}" data-v="${id}">${l}</button>`).join('')}</div>`:''}
+  <p class="muted" style="margin:0;font-size:13px">${Q.note}</p>
+  <div class="optgrid">${Q.o.map(q=>{const e=qEntry(k,v,q);return `<button class="btn ${q===lq?'primary':'ghost'}" style="flex:1 1 28%;min-width:84px;height:64px;flex-direction:column;gap:2px" data-act="qsheet-n" data-k="${k}" data-v="${v}" data-q="${q}"><span style="font-family:var(--display);font-size:22px;line-height:1">${Q.lab(q)}</span><span style="font-size:10.5px;font-weight:600;opacity:.75">${Math.round(e.kcal)} kcal · ${Math.round(e.p)} g</span></button>`}).join('')}</div>`}
+const NUMW={a:1,an:1,one:1,two:2,three:3,four:4,five:5,six:6,seven:7,eight:8,nine:9,ten:10,half:.5,couple:2};
+function bowlNut(pn,bn){const P=BOWL_P.find(x=>x[0]===pn)||BOWL_P[0],B=BOWL_B.find(x=>x[0]===bn)||BOWL_B[0];return {n:`${P[0]} bowl · ${B[0].toLowerCase()}`,kcal:P[1]+B[1],p:P[2]+B[2],tag:'bowl'}}
+function shakeFood(){const pb=new Date().getHours()<12?(+S.settings.amPB||0):0;return {n:pb?`Morning shake + ${pb} tbsp PB`:'Protein shake',kcal:(+S.settings.shakeKcal||415)+95*pb,p:(+S.settings.shakeProtein||35)+3.5*pb,tag:'shake'}}
+function allFoods(){return FOODS.concat((S.settings.myFoods||[]).map(f=>Object.assign({a:[f.n.toLowerCase()]},f)))}
+function parseSeg(seg){
+  let s=seg.trim().toLowerCase().replace(/\s+/g,' ');if(!s)return null;let q=1,m;
+  let grams=null,wlab='';{const wm=s.match(/(\d+(?:\.\d+)?)\s*(lbs?|pounds?|oz|ounces?|grams?|g)\b/);if(wm){const v=+wm[1],u=wm[2];const lb=u[0]==='l'||u[0]==='p',oz=u[0]==='o';grams=v*(lb?453.6:oz?28.35:1);wlab=`${v} ${lb?'lb':oz?'oz':'g'}`;s=(s.slice(0,wm.index)+' '+s.slice(wm.index+wm[0].length)).replace(/\s+/g,' ').trim()}}
+  if((m=s.match(/^(\d+(?:\.\d+)?)\s*(?:x\s+|×\s*)?/))&&m[0]){q=+m[1];s=s.slice(m[0].length)}
+  else{const w=s.split(' ')[0];if(NUMW[w]!=null){q=NUMW[w];s=s.slice(w.length).trim()}}
+  if((m=s.match(/\s*(?:x|×)\s*(\d+(?:\.\d+)?)$/))){q=+m[1];s=s.slice(0,m.index)}
+  s=s.replace(/^(of|cups?|scoops?|slices?|glass(es)?)\s+/,'');
+  if(/teriyaki|bowl|mealpal|meal pal|with rice|with salad/.test(s)&&!/yogh?urt|acai|oat|cereal|poke/.test(s)){
+    const has=k=>s.includes(k);let pn='Chicken Breast';
+    if(has('filet')&&has('broccoli'))pn='Filet Mignon & Broccoli';else if(has('chicken')&&has('broccoli'))pn='Chicken & Broccoli';else if(has('thigh'))pn='Chicken Thigh';else if(has('filet')||has('mignon'))pn='Filet Mignon';else if(has('steak')||has('beef'))pn='Grass Fed Steak';else if(has('fjord'))pn='Hidden Fjord Salmon';else if(has('salmon'))pn='Ōra King Salmon';else if(has('combo'))pn='Combo';else if(has('rib'))pn='Charred Pork Ribs';else if(has('tofu'))pn='Organic Tofu';
+    const bn=has('half')?'Half & half':has('salad')?'Salad':'Rice';const b=bowlNut(pn,bn);return Object.assign(b,{q:q||1,kcal:b.kcal*q,p:b.p*q})}
+  if(/\bshakes?\b/.test(s)){const f=shakeFood();return Object.assign(f,{q,kcal:f.kcal*q,p:f.p*q})}
+  let best=null,bl=0;allFoods().forEach(f=>f.a.forEach(al=>{const re=new RegExp('(^|[^a-z])'+al.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(e?s)?($|[^a-z])');if(re.test(s)&&al.length>bl){best=f;bl=al.length}}));
+  if(!best)return {n:seg.trim(),unknown:true};
+  if(grams&&best.g){const f=grams/best.g;return {n:best.n.replace(/\s*\(.*\)$/,'')+` (${wlab})`,kcal:best.kcal*f,p:best.p*f,q:1}}
+  return {n:best.n,kcal:best.kcal*q,p:best.p*q,q};
+}
+function parseFood(t){return t.split(/[,;\n+]/).map(parseSeg).filter(Boolean)}
+function dayTot(o){if(!o)return {kcal:0,p:0};if(Array.isArray(o.food))return {kcal:o.food.reduce((a,f)=>a+(+f.kcal||0),0),p:o.food.reduce((a,f)=>a+(+f.p||0),0)+(+o.pextra||0)};return {kcal:+o.kcal||0,p:+o.protein||0}}
+function modDay(k,fn){
+  const o=JSON.parse(JSON.stringify(S.weights[k]||{}));
+  if(!Array.isArray(o.food)){o.food=[];const sh=+o.shake||0;const sp=+S.settings.shakeProtein||35;for(let i=0;i<sh;i++)o.food.push(Object.assign({id:uid(),q:1,at:Date.now()},shakeFood()));o.pextra=Math.max(0,(+o.protein||0)-sh*sp)}
+  fn(o);const t=dayTot(o);o.protein=Math.round(t.p)||null;o.kcal=Math.round(t.kcal)||null;if(!o.shake)o.shake=null;S.weights[k]=null;patchDay(k,o);
+}
+function addFoods(list){
+  const k=today();const before=dayTot(S.weights[k]).p;let msgCr=false;
+  modDay(k,o=>{list.forEach(e=>{if(e.unknown)return;if(e.tag==='shake'){o.shake=(+o.shake||0)+(e.q||1);if(S.settings.creatineInShake!==false&&!o.creatine){o.creatine=true;msgCr=true}}
+    o.food.push({id:uid(),n:e.n,kcal:Math.round(e.kcal),p:Math.round(e.p*10)/10,q:e.q||1,at:Date.now(),tag:e.tag||null,k:e.k||null})})});
+  const ok=list.filter(e=>!e.unknown);const kc=ok.reduce((a,e)=>a+e.kcal,0),pr=ok.reduce((a,e)=>a+e.p,0);
+  render();toast(`${ok.length===1?ok[0].n:ok.length+' items'} · ${Math.round(kc)} kcal · ${Math.round(pr)} g protein${msgCr?' · creatine ✓':''}`);
+  const after=dayTot(S.weights[k]).p;if(before<S.settings.protein&&after>=S.settings.protein)setTimeout(()=>{confetti(60);toast('Protein target hit')},1200);
+}
+function recentFoods(n){const seen={},out=[];Object.keys(S.weights).sort().reverse().forEach(k=>{const f=S.weights[k]&&S.weights[k].food;if(!f)return;f.slice().reverse().forEach(x=>{if(x.tag==='shake'||seen[x.n])return;seen[x.n]=1;const q=+x.q||1;out.push({n:x.n,kcal:x.kcal/q,p:x.p/q,tag:x.tag,k:x.k})})});return out.slice(0,n)}
+function energy(d){
+  const a=analysis(d);const bw=a.has?a.cur:(+d.settings.startWeight||160);const prior=Math.round(bw*15/10)*10;
+  const days=lastDays(d,29).slice(0,28).filter(x=>x.kc>=900);const n=days.length;let maint=prior,src='start';
+  if(n>=7&&a.rate!=null){const avg=days.reduce((s,x)=>s+x.kc,0)/n;const est=avg-a.rate*3500/7;const w=Math.min(1,n/21);maint=Math.round((prior*(1-w)+est*w)/10)*10;src='learned'}
+  const surplus=(a.has&&a.dir==='cut')?-400:250;const target=+d.settings.kcalTarget||Math.round((maint+surplus)/50)*50;
+  return {maint,target,n,src,surplus,manual:!!+d.settings.kcalTarget};
+}
+function lastDays(d,n){const out=[];for(let i=n-1;i>=0;i--){const dd=new Date();dd.setHours(12,0,0,0);dd.setDate(dd.getDate()-i);const k=dkey(dd);const o=(d.weights||{})[k]||{};const t=dayTot(o);out.push({k,dd,p:t.p,kc:t.kcal,c:!!o.creatine,s:+o.shake||0})}return out}
 function creatineStreak(d){let n=0;const t=new Date();t.setHours(12,0,0,0);const has=k=>d.weights[k]&&d.weights[k].creatine;if(!has(dkey(t)))t.setDate(t.getDate()-1);while(has(dkey(t))){n++;t.setDate(t.getDate()-1)}return n}
 function dayMap(d){const m={};sessList(d).forEach(s=>{const c={};let n=0;s.ex.forEach(e=>{const g=exInfo(e.n,d).g;c[g]=(c[g]||0)+e.sets.length;n+=e.sets.length});const top=Object.entries(c).sort((a,b)=>b[1]-a[1])[0];const prev=m[s.date];m[s.date]={n:(prev?prev.n:0)+n,g:top?top[0]:'Other'}});return m}
 
@@ -645,15 +744,20 @@ function vToday(){
     <div class="bigstep"><button data-act="wstep" data-d="-0.2" aria-label="Minus 0.2">−</button><input id="w-today" inputmode="decimal" value="${f1(logged?td.lb:lastW)}" aria-label="Weight in pounds"><button data-act="wstep" data-d="0.2" aria-label="Plus 0.2">+</button></div>
     <div class="fields2"><div class="field"><label for="w-waist">Waist at navel (in)</label><input id="w-waist" inputmode="decimal" placeholder="${weeklyWaistHint(d)}" value="${td.waist?esc(td.waist):''}"></div>
     <div class="field" style="justify-content:flex-end"><button class="btn primary block" data-act="logw">${logged?'Update':'Log weight'}</button></div></div></div>`;
-  // protein
-  const pr=+td.protein||0,pt=+st.protein||170,pp=Math.min(1,pr/pt),PC=2*Math.PI*26;
-  h+=`<div class="card"><div class="prot"><div class="mini-ring"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" style="fill:none;stroke:var(--surface2);stroke-width:7"/><circle class="ring-prog" cx="32" cy="32" r="26" style="fill:none;stroke:var(--green);stroke-width:7;stroke-linecap:round;stroke-dasharray:${PC.toFixed(1)};stroke-dashoffset:${(PC*(1-pp)).toFixed(1)}"/></svg><span>${Math.round(pp*100)}%</span></div>
-    <div style="display:flex;flex-direction:column;gap:8px;min-width:0"><div class="row between"><div><div class="eyebrow">Protein today</div><div><span class="num" style="font-size:24px;font-weight:800">${pr}</span><span class="muted"> / ${pt} g</span></div></div><button class="chip" data-act="prot" data-g="-10" aria-label="Remove 10 grams">−10</button></div>
-    <div class="row" style="gap:6px"><button class="chip" data-act="prot" data-g="20">+20</button><button class="chip" data-act="prot" data-g="30">+30</button><button class="chip" data-act="prot" data-g="40">+40</button><button class="chip" data-act="prot" data-g="50">+50</button></div></div></div></div>`;
+  // fuel
+  const E=energy(d),tt=dayTot(td),pt=+st.protein||170,PC=2*Math.PI*26,kp=Math.min(1,tt.kcal/E.target),pp=Math.min(1,tt.p/pt),foods=td.food||[];
+  const ring=(pct,c,lab)=>`<div class="mini-ring" style="width:58px;height:58px"><svg viewBox="0 0 64 64"><circle cx="32" cy="32" r="26" style="fill:none;stroke:var(--surface2);stroke-width:7"/><circle class="ring-prog" cx="32" cy="32" r="26" style="fill:none;stroke:${c};stroke-width:7;stroke-linecap:round;stroke-dasharray:${PC.toFixed(1)};stroke-dashoffset:${(PC*(1-pct)).toFixed(1)}"/></svg><span style="font-size:14px">${lab}</span></div>`;
+  const rec=recentFoods(8).filter(r=>!r.k&&r.tag!=='bowl'&&r.tag!=='shake').slice(0,2);
+  h+=`<div class="card"><div class="row between"><h3>Fuel today</h3><button class="chip" data-act="food-add">+ Add food</button></div>
+    <div class="fuel"><div class="fring">${ring(kp,'var(--yellow)',Math.round(kp*100)+'%')}<div style="min-width:0"><div class="eyebrow">Calories</div><div><span class="num" style="font-size:23px;font-weight:800">${f0(tt.kcal)}</span><span class="muted" style="font-size:12px"> / ${f0(E.target)}</span></div></div></div>
+    <div class="fring">${ring(pp,'var(--green)',Math.round(pp*100)+'%')}<div style="min-width:0"><div class="eyebrow">Protein</div><div><span class="num" style="font-size:23px;font-weight:800">${Math.round(tt.p)}</span><span class="muted" style="font-size:12px"> / ${pt} g</span></div></div></div></div>
+    <div class="qchips">${quickChips()}${rec.map(r=>`<button class="chip" data-act="qfood" data-n="${esc(r.n)}">${esc(r.n)}</button>`).join('')}</div>
+    ${foods.length?`<div>${foods.map((f,i)=>`<div class="food"><span>${+f.q>1||+f.q<1?`${+f.q}× `:''}${esc(f.n)}</span><span class="fk">${f0(f.kcal)} kcal</span><span class="fk">${Math.round(f.p)} g</span><button class="fx" data-act="food-del" data-i="${i}" aria-label="Remove ${esc(f.n)}">×</button></div>`).join('')}${+td.pextra?`<div class="food"><span class="muted">Extra protein</span><span class="fk"></span><span class="fk">${Math.round(td.pextra)} g</span><span></span></div>`:''}</div>`:`<p class="muted" style="margin:0;font-size:13px">Nothing logged yet. Tap a meal above, or tap + Add food and type what you ate.</p>`}
+    <div class="row wrap" style="gap:6px"><span class="muted" style="font-size:12px;margin-right:auto">Protein only</span><button class="chip" data-act="prot" data-g="-10">−10</button><button class="chip" data-act="prot" data-g="10">+10</button><button class="chip" data-act="prot" data-g="20">+20</button><button class="chip" data-act="prot" data-g="30">+30</button></div></div>`;
   const shN=+td.shake||0,crOn=!!td.creatine,stk=creatineStreak(d),l14=lastDays(d,14);
   h+=`<div class="card"><div class="row between"><h3>Shake &amp; creatine</h3><span class="pill ${stk>=7?'good':stk>0?'warn':'neutral'}">${stk?`${stk}-day creatine streak`:'Start a streak'}</span></div>
     <div class="supps">
-      <button class="supp shake ${shN?'on':''}" data-act="shake"><span class="si"><svg viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10l-1.3 12.2a2 2 0 0 1-2 1.8h-3.4a2 2 0 0 1-2-1.8z"/><path d="M6 7h12M12 7V3l3-1"/></svg></span><span class="cnt">${shN?'×'+shN:'+'}</span><span><b>Protein shake</b><small>${esc(st.shakeItems||'')} · +${+st.shakeProtein||35} g protein</small></span></button>
+      <button class="supp shake ${shN?'on':''}" data-act="shake"><span class="si"><svg viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7h10l-1.3 12.2a2 2 0 0 1-2 1.8h-3.4a2 2 0 0 1-2-1.8z"/><path d="M6 7h12M12 7V3l3-1"/></svg></span><span class="cnt">${shN?'×'+shN:'+'}</span>${(()=>{const sf=shakeFood();return `<span><b>${sf.n.startsWith('Morning')?'Morning shake':'Protein shake'}</b><small>${esc(st.shakeItems||'')}${sf.n.startsWith('Morning')?' + PB':''} · ${Math.round(sf.kcal)} kcal · ${Math.round(sf.p)} g</small></span>`})()}</button>
       <button class="supp crea ${crOn?'on':''}" data-act="creatine"><span class="si"><svg viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="5" rx="1.5"/><path d="M8 8h8v11a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2z"/><path d="M10.5 13.5h3"/></svg></span><span class="cnt">${crOn?'✓':''}</span><span><b>Creatine</b><small>${+st.creatineDose||5} g · every day, any time</small></span></button>
     </div>
     <div style="display:flex;flex-direction:column;gap:6px"><div class="cdots">${l14.map(x=>`<i class="${x.c?'on':''} ${x.k===tk?'t':''}" title="${x.k}"></i>`).join('')}</div><div class="row between mono muted" style="font-size:10.5px"><span>14 DAYS AGO</span><span>${l14.filter(x=>x.c).length}/14 creatine</span><span>TODAY</span></div></div>
@@ -676,6 +780,8 @@ function insightRow(c,g,t,s){return `<div class="insight"><span class="ic" style
 function insights(d,a,ws){
   const out=[];
   if(a.pace)out.push(insightRow(a.pace.cls==='good'?'var(--green)':a.pace.cls==='bad'?'var(--red)':'var(--yellow)','↗',`${a.pace.t}${a.rate!=null?` · ${sgn(a.rate)} lb/week`:''}`,a.pace.tip));
+  {const E=energy(d);if(E.src==='learned')out.push(insightRow('var(--yellow)','K',`Maintenance ≈ ${f0(E.maint)} kcal`,`Learned from ${E.n} logged days and your weight trend. Aim for about ${f0(E.target)} kcal a day for lean gain.`));
+   else out.push(insightRow('var(--yellow)','K',`Aim for about ${f0(E.target)} kcal a day`,`Starting estimate from your body weight. Log food for 1–3 weeks and the app works out your real maintenance from your weight trend.`))}
   if(a.waist&&a.waist.dW!=null){const {dW,dL}=a.waist;let t,s,c;
     if(dL>0.5&&dW<=0.25){t=`Weight ${sgn(dL)} lb, waist ${sgn(dW)} in`;s='Weight up while your waist holds steady: the gain is mostly lean.';c='var(--green)'}
     else if(dL>0&&dW>0.5){t=`Waist ${sgn(dW)} in since ${shortDate(a.waist.from)}`;s='Your waist is growing with your weight. Slow the surplus a little to keep the lower abs tight.';c='var(--red)'}
@@ -782,6 +888,17 @@ function vProgress(){
       <div class="legend"><span><i style="background:var(--green)"></i>Protein g (hit target)</span><span><i style="background:var(--orange);border-radius:50%"></i>Creatine taken</span></div>
       <div class="statrow"><div class="kv"><span class="k">Avg 7d</span><span class="v">${avg||'—'}</span></div><div class="kv"><span class="k">Target</span><span class="v">${tgt}</span></div><div class="kv"><span class="k">Creatine</span><span class="v">${days.filter(x=>x.c).length}/14</span></div><div class="kv"><span class="k">Shakes 7d</span><span class="v">${days.slice(7).reduce((s,x)=>s+x.s,0)}</span></div></div></div>`;
   }}
+  {const days=lastDays(d,14);if(days.some(x=>x.kc)){const E=energy(d);
+    const top=Math.max(E.target*1.15,...days.map(x=>x.kc));const W=360,H=170,Lp=34,B=30,T=10;const bw=(W-Lp-4)/14;const yy=v=>T+(1-v/top)*(H-T-B);let svg='';
+    const st=niceStep(top/4);for(let v=0;v<=top+1e-9;v+=st){svg+=`<line class="gl" x1="${Lp}" x2="${W-4}" y1="${yy(v).toFixed(1)}" y2="${yy(v).toFixed(1)}"/><text class="ax" x="${Lp-5}" y="${(yy(v)+3).toFixed(1)}" text-anchor="end">${v>=1000?(v/1000)+'k':v}</text>`}
+    days.forEach((x,i)=>{const x0=Lp+i*bw+3,w=bw-6;if(x.kc)svg+=`<rect class="bar" x="${x0.toFixed(1)}" y="${yy(x.kc).toFixed(1)}" width="${w.toFixed(1)}" height="${(H-B-yy(x.kc)).toFixed(1)}" rx="3" style="fill:${x.kc>=900?'var(--yellow)':'color-mix(in srgb,var(--yellow) 40%,var(--surface2))'};animation-delay:${(i*.035).toFixed(2)}s"/>`;svg+=`<text class="ax" x="${(x0+w/2).toFixed(1)}" y="${H-B+13}" text-anchor="middle">${'SMTWTFS'[x.dd.getDay()]}</text>`});
+    svg+=`<line x1="${Lp}" x2="${W-4}" y1="${yy(E.target).toFixed(1)}" y2="${yy(E.target).toFixed(1)}" style="stroke:var(--chalk);stroke-width:1.5;stroke-dasharray:4 4"/><text x="${W-4}" y="${(yy(E.target)-5).toFixed(1)}" text-anchor="end" style="fill:var(--chalk);font-family:var(--mono);font-size:9.5px;font-weight:600">TARGET ${E.target}</text>`;
+    svg+=`<line x1="${Lp}" x2="${W-4}" y1="${yy(E.maint).toFixed(1)}" y2="${yy(E.maint).toFixed(1)}" style="stroke:var(--muted);stroke-width:1;stroke-dasharray:2 4"/><text x="${Lp+4}" y="${(yy(E.maint)+12).toFixed(1)}" style="fill:var(--muted);font-family:var(--mono);font-size:9px">MAINT ${E.maint}</text>`;
+    const wk=days.slice(7).filter(x=>x.kc>=900);const avg=wk.length?Math.round(wk.reduce((s,x)=>s+x.kc,0)/wk.length):0;
+    h+=`<div class="card"><div class="row between"><h3>Calories</h3><span class="pill ${E.src==='learned'?'good':'neutral'}">${E.src==='learned'?`Learned · ${E.n} days`:'Learning'}</span></div><div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Daily calories, last 14 days">${svg}</svg></div>
+      <div class="statrow"><div class="kv"><span class="k">Avg 7d</span><span class="v">${avg?f0(avg):'—'}</span></div><div class="kv"><span class="k">Target</span><span class="v">${f0(E.target)}</span></div><div class="kv"><span class="k">Maint.</span><span class="v">${f0(E.maint)}</span></div><div class="kv"><span class="k">Logged</span><span class="v">${E.n}/28</span></div></div>
+      <p class="muted" style="margin:0;font-size:12.5px">${E.src==='learned'?'Maintenance comes from what you logged minus what your weight trend says you stored or burned. It updates every day.':`After 7+ fully logged days (900+ kcal), the app replaces the starting estimate with what your weight trend says.`}</p></div>`;
+  }}
   if(L.length){
     // strength
     const bw=latestBW(d);const byEx={};
@@ -830,7 +947,7 @@ function vLog(){
   } else {
     const ws=withTrend(weightSeries(S)).reverse();const extra=Object.entries(S.weights).filter(([k,v])=>v&&!(v.lb>0)&&v.protein);
     if(!ws.length)return h+`<div class="card empty"><div class="glyph">—</div><p class="muted" style="margin:0">No weigh-ins yet.</p></div></div>`;
-    h+=`<div class="card" style="gap:0">`+ws.map((p,i)=>{const prev=ws[i+1];const dl=prev?p.lb-prev.lb:null;const dt=new Date(p.t);const pr=S.weights[p.k]&&S.weights[p.k].protein;return `<button class="wrow" data-act="edit-w" data-k="${p.k}"><div><div style="font-weight:700">${DOW[dt.getDay()]} ${shortDate(p.t)}</div><div class="mono muted" style="font-size:11px">trend ${f1(p.tr)}${p.waist?` · waist ${p.waist}"`:''}${pr?` · ${pr}g protein`:''}${S.weights[p.k]&&S.weights[p.k].creatine?' · creatine':''}</div></div><span class="mono ${dl==null?'muted':dl>0?'up':dl<0?'dn':'muted'}" style="font-size:12px">${dl==null?'':sgn(dl)}</span><span class="num" style="font-size:24px;font-weight:800">${f1(p.lb)}</span></button>`}).join('')+`</div>`;
+    h+=`<div class="card" style="gap:0">`+ws.map((p,i)=>{const prev=ws[i+1];const dl=prev?p.lb-prev.lb:null;const dt=new Date(p.t);const pr=S.weights[p.k]&&S.weights[p.k].protein;return `<button class="wrow" data-act="edit-w" data-k="${p.k}"><div><div style="font-weight:700">${DOW[dt.getDay()]} ${shortDate(p.t)}</div><div class="mono muted" style="font-size:11px">trend ${f1(p.tr)}${p.waist?` · waist ${p.waist}"`:''}${pr?` · ${pr}g protein`:''}${S.weights[p.k]&&S.weights[p.k].kcal?` · ${S.weights[p.k].kcal} kcal`:''}${S.weights[p.k]&&S.weights[p.k].creatine?' · creatine':''}</div></div><span class="mono ${dl==null?'muted':dl>0?'up':dl<0?'dn':'muted'}" style="font-size:12px">${dl==null?'':sgn(dl)}</span><span class="num" style="font-size:24px;font-weight:800">${f1(p.lb)}</span></button>`}).join('')+`</div>`;
   }
   return h+'</div>';
 }
@@ -859,6 +976,8 @@ function settingsSheet(){
   <div class="field"><label for="s-r">Rest timer (sec)</label><input id="s-r" inputmode="numeric" value="${esc(st.rest)}"></div><div class="field"><label for="s-b">Bar weight (lb)</label><input id="s-b" inputmode="decimal" value="${esc(st.bar)}"></div></div>
   <div class="eyebrow" style="margin-top:4px">Shake &amp; supplements</div>
   <div class="fields2"><div class="field"><label for="s-sp">Protein per shake (g)</label><input id="s-sp" inputmode="numeric" value="${esc(st.shakeProtein)}"></div><div class="field"><label for="s-cd">Creatine dose (g)</label><input id="s-cd" inputmode="decimal" value="${esc(st.creatineDose)}"></div></div>
+  <div class="fields2"><div class="field"><label for="s-sk">Calories per shake</label><input id="s-sk" inputmode="numeric" value="${esc(st.shakeKcal)}"></div><div class="field"><label for="s-kt">Calorie target</label><input id="s-kt" inputmode="numeric" placeholder="Auto (${energy(S).target})" value="${esc(st.kcalTarget||'')}"></div></div>
+  <div class="field"><label for="s-pb">Peanut butter in morning shake (tbsp, before noon)</label><input id="s-pb" inputmode="decimal" value="${esc(st.amPB)}"></div>
   <div class="field"><label for="s-si">What's in your shake</label><input id="s-si" value="${esc(st.shakeItems)}"></div>
   <label class="row" style="gap:10px;font-size:14px" for="s-cis"><input type="checkbox" id="s-cis" ${st.creatineInShake!==false?'checked':''} style="width:22px;height:22px;accent-color:var(--red)">Creatine goes in my shake (first shake checks it off)</label>
   <div class="field"><label>Paused muscle groups (injury) · saves on tap</label><div class="chips" style="flex-wrap:wrap">${GROUPS.map(g=>`<button class="chip ${(st.paused||[]).includes(g)?'on':''}" data-act="pause" data-g="${g}">${g}</button>`).join('')}</div></div>
@@ -868,7 +987,7 @@ function settingsSheet(){
   <div class="row"><label class="btn ghost sm grow" for="imp-f" style="cursor:pointer">Restore from file</label><button class="btn ghost sm grow" data-act="import-show">Paste backup</button></div>
   <input type="file" id="imp-f" accept="application/json,.json,text/plain" hidden>
   <div id="imp" hidden><div class="field"><label for="imp-t">Paste backup text</label><textarea id="imp-t"></textarea></div><button class="btn ghost block" data-act="import">Import and merge</button></div>
-  <p class="mono muted" style="font-size:11px;margin:0">FORGE 170 · VERSION 3</p>
+  <p class="mono muted" style="font-size:11px;margin:0">FORGE 170 · VERSION 4</p>
   <p class="muted" style="font-size:12px;margin:0">Your data is stored only on this phone. ${st.lastBackup?`Last backup: ${shortDate(st.lastBackup)}.`:'No backup yet.'} Save a backup file to iCloud Drive once a week so you never lose your history. Imports merge with what's here and never delete anything.</p>`;
 }
 function summarySheet(s,prs){
@@ -879,6 +998,28 @@ function summarySheet(s,prs){
   <button class="btn primary block" data-act="close">Nice</button>`;
 }
 
+function eggSheet(){const e=FOODS.find(x=>x.id==='egg');const last=+S.settings.lastEggs||4;return `<h3>Boiled eggs</h3><p class="muted" style="margin:0;font-size:13px">${e.kcal} kcal and ${e.p} g protein each. Tap how many.</p>
+  <div class="optgrid">${[2,3,4,5,6].map(n=>`<button class="btn ${n===last?'primary':'ghost'}" style="flex:1;min-width:52px;font-size:22px;font-family:var(--display)" data-act="eggs-n" data-n="${n}">${n}</button>`).join('')}</div>`}
+function bowlSheet(){const b=bowlNut(bowlSel.p,bowlSel.b);return `<div class="row between"><h3>Teriyaki bowl</h3><button class="chip" data-act="close">Close</button></div>
+  <div class="eyebrow">Protein</div><div class="optgrid">${BOWL_P.map(([n])=>`<button class="chip ${n===bowlSel.p?'on':''}" data-act="bowl-p" data-v="${esc(n)}">${esc(n)}</button>`).join('')}</div>
+  <div class="eyebrow">Base</div><div class="optgrid">${BOWL_B.map(([n])=>`<button class="chip ${n===bowlSel.b?'on':''}" data-act="bowl-b" data-v="${esc(n)}">${esc(n)}</button>`).join('')}</div>
+  <div class="row" style="justify-content:space-around;padding:12px;border-radius:14px;background:var(--surface2)"><div class="kv"><span class="k">Calories</span><span class="v">~${b.kcal}</span></div><div class="kv"><span class="k">Protein</span><span class="v">${b.p} g</span></div></div>
+  <button class="btn primary block" data-act="bowl-add">Add bowl</button>
+  <p class="muted" style="font-size:12px;margin:0">Protein for chicken breast, salmon, combo and filet &amp; broccoli comes from the menu. The rest, and all calories, are estimates.</p>`}
+function parsePreview(){if(!foodQ.trim())return '';const L=parseFood(foodQ);const ok=L.filter(x=>!x.unknown);const kc=ok.reduce((a,e)=>a+e.kcal,0),pr=ok.reduce((a,e)=>a+e.p,0);
+  return `<div class="parse">${L.map(x=>x.unknown?`<div class="food unk"><span>? ${esc(x.n)}</span><span class="fk">not found</span><span class="fk">add below</span></div>`:`<div class="food"><span>${x.q!==1?x.q+'× ':''}${esc(x.n)}</span><span class="fk">${Math.round(x.kcal)} kcal</span><span class="fk">${Math.round(x.p)} g</span></div>`).join('')}</div>
+  ${ok.length?`<button class="btn primary block" data-act="food-parse-add">Add ${ok.length} item${ok.length>1?'s':''} · ${Math.round(kc)} kcal · ${Math.round(pr)} g</button>`:''}`}
+function addSheet(){const rec=recentFoods(8);const mine=S.settings.myFoods||[];return `<div class="row between"><h3>Add food</h3><button class="chip" data-act="close">Done</button></div>
+  <div class="field"><label for="fq">Type what you ate, separated by commas</label><input id="fq" placeholder="bagel and cream cheese, 0.8 lb flank, 2 dates" autocomplete="off" value="${esc(foodQ)}"></div>
+  <div id="fprev">${parsePreview()}</div>
+  <div class="eyebrow">One tap</div><div class="qchips">${quickChips()}<button class="chip" data-act="q-shake">Protein shake</button>${rec.filter(r=>!r.k&&r.tag!=='bowl').map(r=>`<button class="chip" data-act="qfood" data-n="${esc(r.n)}">${esc(r.n)}</button>`).join('')}</div>
+  ${mine.length?`<div class="eyebrow">My foods</div><div class="qchips">${mine.map(f=>`<span class="chip" style="padding-right:4px"><button data-act="qfood" data-n="${esc(f.n)}" style="font-weight:700">${esc(f.n)} · ${f.kcal}</button><button data-act="myfood-del" data-n="${esc(f.n)}" aria-label="Remove ${esc(f.n)}" style="width:22px;color:var(--faint)">×</button></span>`).join('')}</div>`:''}
+  <div class="eyebrow">Something else</div>
+  <div class="field"><label for="fc-n">Name</label><input id="fc-n" placeholder="e.g. Mom's lentil soup"></div>
+  <div class="fields2"><div class="field"><label for="fc-k">Calories</label><input id="fc-k" inputmode="numeric"></div><div class="field"><label for="fc-p">Protein (g)</label><input id="fc-p" inputmode="numeric"></div></div>
+  <label class="row" style="gap:10px;font-size:14px" for="fc-s"><input type="checkbox" id="fc-s" checked style="width:22px;height:22px;accent-color:var(--red)">Save to My foods so the type box knows it</label>
+  <button class="btn ghost block" data-act="food-custom">Add</button>
+  <p class="muted" style="font-size:12px;margin:0">Rough numbers are fine. The app learns your real maintenance calories by comparing what you log with your weight trend. Being consistent matters more than being exact.</p>`}
 /* ---------- actions ---------- */
 function go(t){tab=t;try{localStorage.setItem(LS+'.tab',t)}catch(e){}render();window.scrollTo({top:0});if(t==='train'&&S.active)keepAwake()}
 $$('.tab').forEach(b=>b.addEventListener('click',()=>go(b.dataset.tab)));
@@ -893,10 +1034,25 @@ document.addEventListener('click',e=>{
     Object.assign(S.settings,{goal,startWeight:cur,startDate:today(),height:h||null,protein:Math.round(goal)});saveSettings();patchDay(today(),{lb:cur,waist:w||null});render();confetti(60);toast('Locked in. Target '+goal+' lb');break}
   case 'wstep':{const i=$('#w-today');i.value=f1((num(i.value)||0)+(+b.dataset.d));break}
   case 'logw':{const v=num($('#w-today').value),w=num($('#w-waist').value);if(!v||v<60||v>500){toast('Enter a weight between 60 and 500 lb');return}const had=S.weights[today()]&&S.weights[today()].lb;patchDay(today(),{lb:v,waist:w||(S.weights[today()]||{}).waist||null});render();toast(had?'Updated':'Logged '+f1(v)+' lb');break}
-  case 'prot':{const k=today();const cur=+(S.weights[k]||{}).protein||0;const nv=Math.max(0,cur+(+b.dataset.g));patchDay(k,{protein:nv||null});render();if(cur<S.settings.protein&&nv>=S.settings.protein){confetti(50);toast('Protein target hit')}break}
+  case 'prot':{const k=today();const before=dayTot(S.weights[k]).p;modDay(k,o=>{o.pextra=Math.max(0,(+o.pextra||0)+(+b.dataset.g))});render();const after=dayTot(S.weights[k]).p;if(before<S.settings.protein&&after>=S.settings.protein){confetti(50);toast('Protein target hit')}break}
   case 'go-train':go('train');break;
-  case 'shake':{const k=today();const o=S.weights[k]||{};const g=+S.settings.shakeProtein||35;const n=(+o.shake||0)+1;const before=+o.protein||0;const patch={shake:n,protein:before+g};let msg=`Shake${n>1?' #'+n:''} logged · +${g} g protein`;if(S.settings.creatineInShake!==false&&!o.creatine){patch.creatine=true;msg+=' · creatine ✓'}patchDay(k,patch);render();toast(msg);if(before<S.settings.protein&&patch.protein>=S.settings.protein)confetti(50);break}
-  case 'shake-undo':{const k=today();const o=S.weights[k]||{};if(!(+o.shake>0))return;const g=+S.settings.shakeProtein||35;patchDay(k,{shake:(+o.shake-1)||null,protein:Math.max(0,(+o.protein||0)-g)||null});render();toast('Removed one shake');break}
+  case 'shake':addFoods([shakeFood()]);break;
+  case 'shake-undo':{const k=today();modDay(k,o=>{const i=o.food.map(f=>f.tag).lastIndexOf('shake');if(i>=0)o.food.splice(i,1);else o.pextra=Math.max(0,(+o.pextra||0)-(+S.settings.shakeProtein||35));o.shake=Math.max(0,(+o.shake||0)-1)});render();toast('Removed one shake');break}
+  case 'food-add':foodQ='';openSheet(addSheet(),r=>{});break;
+  case 'food-del':{const i=+b.dataset.i;modDay(today(),o=>{const f=o.food[i];if(!f)return;if(f.tag==='shake')o.shake=Math.max(0,(+o.shake||0)-1);o.food.splice(i,1)});render();break}
+  case 'qfood':{let f=null;if(b.dataset.id)f=FOODS.find(x=>x.id===b.dataset.id);else{const n=b.dataset.n;f=recentFoods(50).find(x=>x.n===n)||allFoods().find(x=>x.n===n)}if(!f)return;closeSheetIfOpen();addFoods([{n:f.n,kcal:f.kcal,p:f.p,q:1,tag:f.tag,k:b.dataset.id||f.k||null}]);break}
+  case 'q-shake':closeSheetIfOpen();addFoods([shakeFood()]);break;
+  case 'eggs':qsel={};openSheet(qSheet('eggs'));break;
+  case 'qsheet':qsel={};openSheet(qSheet(b.dataset.k));break;
+  case 'qsheet-v':qsel.v=b.dataset.v;$('#sheetIn').innerHTML='<div class="grab"></div>'+qSheet(b.dataset.k);break;
+  case 'qsheet-n':{const k=b.dataset.k,v=b.dataset.v,q=+b.dataset.q;S.settings.lastQty=Object.assign({},S.settings.lastQty||{},{[k]:{v,q}});saveSettings();closeSheet();addFoods([qEntry(k,v,q)]);break}
+  case 'bowl':{const lb=S.settings.lastBowl||{};bowlSel={p:lb.p||'Chicken Thigh',b:lb.b||'Rice'};openSheet(bowlSheet());break}
+  case 'bowl-p':bowlSel.p=b.dataset.v;$('#sheetIn').innerHTML='<div class="grab"></div>'+bowlSheet();break;
+  case 'bowl-b':bowlSel.b=b.dataset.v;$('#sheetIn').innerHTML='<div class="grab"></div>'+bowlSheet();break;
+  case 'bowl-add':{S.settings.lastBowl={p:bowlSel.p,b:bowlSel.b};saveSettings();closeSheet();addFoods([Object.assign(bowlNut(bowlSel.p,bowlSel.b),{q:1,k:'bowl'})]);break}
+  case 'food-parse-add':{const L=parseFood(foodQ);if(!L.some(x=>!x.unknown)){toast('Nothing recognized yet. Try "4 eggs, cappuccino".');return}closeSheet();addFoods(L);foodQ='';break}
+  case 'food-custom':{const n=($('#fc-n').value||'').trim().slice(0,40),kc=num($('#fc-k').value),pr=num($('#fc-p').value);if(!n||kc==null){toast('Enter a name and calories');return}if($('#fc-s').checked){S.settings.myFoods=(S.settings.myFoods||[]).filter(f=>f.n!==n).concat([{n,kcal:kc,p:pr||0}]);saveSettings()}closeSheet();addFoods([{n,kcal:kc,p:pr||0,q:1}]);break}
+  case 'myfood-del':{S.settings.myFoods=(S.settings.myFoods||[]).filter(f=>f.n!==b.dataset.n);saveSettings();$('#sheetIn').innerHTML='<div class="grab"></div>'+addSheet();break}
   case 'creatine':{const k=today();const o=S.weights[k]||{};patchDay(k,{creatine:o.creatine?null:true});render();if(!o.creatine){toast('Creatine ✓ · '+creatineStreak(S)+'-day streak')}break}
   case 'tpl':{const t=TEMPLATES[+b.dataset.i];startWorkout(t.name,resolveTpl(t));break}
   case 'swap':{const i=+b.dataset.ei;const old=S.active.ex[i];const n=b.dataset.n;const inf=exInfo(n);const tpl=TEMPLATES.find(t=>t.def&&t.def[n]!=null);S.active.ex[i]=newEx(n,old.alts,tpl?tpl.def[n]:(inf.bw||inf.t)?0:null,inf.t?30:10);saveActive();closeSheet();render();toast('Swapped to '+n);break}
@@ -945,9 +1101,9 @@ document.addEventListener('click',e=>{
   case 'edit-w':openSheet(weighSheet(b.dataset.k));break;
   case 'ws-save':{const old=b.dataset.k,k=$('#ws-d').value||old;const lb=num($('#ws-lb').value),w=num($('#ws-w').value),p=num($('#ws-p').value);if(lb!=null&&(lb<60||lb>500)){toast('Weight looks off. Use lb.');return}
     if(k!==old&&S.weights[old]){delete S.weights[old];writeDoc('weights/'+old,null)}
-    patchDay(k,{lb:lb||null,waist:w||null,protein:p||null});closeSheet();render();toast('Saved');break}
+    patchDay(k,{lb:lb||null,waist:w||null});if(p!=null&&Math.round(dayTot(S.weights[k]).p)!==p)modDay(k,o=>{const fp=o.food.reduce((a,f)=>a+(+f.p||0),0);o.pextra=Math.max(0,p-fp)});closeSheet();render();toast('Saved');break}
   case 'ws-del':{if(delArm!==b){delArm=b;b.textContent='Tap again to delete';return}delArm=null;delete S.weights[b.dataset.k];writeDoc('weights/'+b.dataset.k,null);closeSheet();render();toast('Deleted');break}
-  case 's-save':{const st=S.settings;const g=num($('#s-goal').value);if(g)st.goal=g;st.startWeight=num($('#s-start').value)||st.startWeight;st.height=num($('#s-h').value);st.protein=num($('#s-p').value)||st.protein;st.rest=Math.max(15,Math.min(600,num($('#s-r').value)||90));st.bar=num($('#s-b').value)||45;st.shakeProtein=num($('#s-sp').value)||35;st.creatineDose=num($('#s-cd').value)||5;st.shakeItems=($('#s-si').value||'').trim().slice(0,60);st.creatineInShake=$('#s-cis').checked;saveSettings();closeSheet();render();toast('Settings saved');break}
+  case 's-save':{const st=S.settings;const g=num($('#s-goal').value);if(g)st.goal=g;st.startWeight=num($('#s-start').value)||st.startWeight;st.height=num($('#s-h').value);st.protein=num($('#s-p').value)||st.protein;st.rest=Math.max(15,Math.min(600,num($('#s-r').value)||90));st.bar=num($('#s-b').value)||45;st.shakeProtein=num($('#s-sp').value)||35;st.creatineDose=num($('#s-cd').value)||5;st.shakeItems=($('#s-si').value||'').trim().slice(0,60);st.creatineInShake=$('#s-cis').checked;st.shakeKcal=num($('#s-sk').value)||415;st.amPB=num($('#s-pb').value)||0;st.kcalTarget=num($('#s-kt').value)||null;saveSettings();closeSheet();render();toast('Settings saved');break}
   case 'open-settings':openSheet(settingsSheet());break;
   case 'export':{const txt=backupJSON();const done=()=>{markBackup();toast('Copied '+Math.max(1,Math.round(txt.length/1024))+' KB. Paste it into Notes.')};try{navigator.clipboard.writeText(txt).then(done,()=>fallbackCopy(txt))}catch(er){fallbackCopy(txt)}break}
   case 'import-show':$('#imp').hidden=false;break;
@@ -980,6 +1136,7 @@ function fallbackCopy(txt){const t=document.createElement('textarea');t.value=tx
 
 document.addEventListener('input',e=>{
   const t=e.target;
+  if(t.id==='fq'){foodQ=t.value;const pv=$('#fprev');if(pv)pv.innerHTML=parsePreview();return}
   if(t.id==='pq'){pickerQ=t.value;const L=$('#sheetIn');const pos=t.selectionStart;L.innerHTML='<div class="grab"></div>'+exPicker();const n=$('#pq');n.focus();try{n.setSelectionRange(pos,pos)}catch(er){}return}
   if(t.id==='wname'&&S.active){S.active.name=t.value;saveActive();return}
   const setEl=t.closest('.set');if(setEl&&S.active){const ei=+t.closest('.ex').dataset.ei,si=+setEl.dataset.si;const v=t.value.trim();S.active.ex[ei].sets[si][t.dataset.f]=v===''?'':(num(v)??'');saveActive();updTotals();if(t.dataset.f==='w')refreshPlates(ei)}
@@ -990,7 +1147,7 @@ document.addEventListener('focusin',e=>{const t=e.target;if(t.matches('.stp inpu
 function makeSample(){
   const s={settings:Object.assign({},DEF_SETTINGS,{goal:170,startWeight:158.2,height:70}),weights:{},sessions:{}};
   let seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647};
-  const N=84;for(let i=N;i>=0;i--){const d=new Date(Date.now()-i*DAY);const k=dkey(d);const base=158.2+(N-i)*0.055;const lb=+(base+(rnd()-.5)*2.2).toFixed(1);const o={lb,date:k,protein:Math.round(140+rnd()*50),creatine:rnd()>.12,shake:1};if(d.getDay()===0)o.waist=+(32.6-(N-i)*.003+(rnd()-.5)*.2).toFixed(1);if(rnd()>.12)s.weights[k]=o}
+  const N=84;for(let i=N;i>=0;i--){const d=new Date(Date.now()-i*DAY);const k=dkey(d);const base=158.2+(N-i)*0.055;const lb=+(base+(rnd()-.5)*2.2).toFixed(1);const o={lb,date:k,protein:Math.round(140+rnd()*50),creatine:rnd()>.12,shake:1,kcal:Math.round(2500+(rnd()-.5)*700)};if(d.getDay()===0)o.waist=+(32.6-(N-i)*.003+(rnd()-.5)*.2).toFixed(1);if(rnd()>.12)s.weights[k]=o}
   const plan=['Push','Pull','Legs','Core'].map(n=>TEMPLATES.find(t=>t.name===n));const startW={'Bench Press':165,'Overhead Press':105,'Incline Dumbbell Press':55,'Lateral Raise':20,'Tricep Pushdown':50,'Cable Crunch':70,'Pull-up':0,'Barbell Row':145,'Lat Pulldown':130,'Face Pull':45,'Hammer Curl':30,'Hanging Leg Raise':0,'Back Squat':215,'Romanian Deadlift':185,'Leg Press':320,'Leg Curl':90,'Calf Raise':140,'Ab Wheel Rollout':0,'Pallof Press':40,'Plank':0};
   let pi=0;for(let i=N;i>=0;i--){const d=new Date(Date.now()-i*DAY);if(![1,2,4,5].includes(d.getDay()))continue;const t=plan[pi++%plan.length];const wk=(N-i)/7;const id='sample'+i;
     s.sessions[id]={id,name:t.name,date:dkey(d),start:d.getTime()+17*36e5,end:d.getTime()+17*36e5+(55+rnd()*20)*6e4,ex:t.ex.map(n=>{const inf=exInfo(n,s);const w0=startW[n]||40;const w=inf.t?0:Math.round((w0*(1+wk*.012))/5)*5;return {n,g:inf.g,sets:[0,1,2].map(j=>({w:inf.bw?0:w,r:inf.t?45+Math.round(wk*3):Math.max(5,(inf.bb?6:10)+Math.round(rnd()*2)-j),pr:false}))}})}}
